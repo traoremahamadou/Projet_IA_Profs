@@ -13,7 +13,7 @@
     <header class="bg-slate-800 border-b border-slate-700 p-4 shadow-lg">
         <div class="max-w-7xl mx-auto flex justify-between items-center">
             <h1 class="text-2xl font-bold text-sky-400 flex items-center gap-2">
-                🎓 AI EduGest <span class="text-xs bg-emerald-500/20 text-emerald-300 px-2 py-1 rounded-full border border-emerald-500/30">Stylo Magique v1.6</span>
+                🎓 AI EduGest <span class="text-xs bg-emerald-500/20 text-emerald-300 px-2 py-1 rounded-full border border-emerald-500/30">Stylo Magique v1.7</span>
             </h1>
             <p class="text-sm text-slate-400">Assistant Gestuel pour Enseignants</p>
         </div>
@@ -37,11 +37,12 @@
                 <video id="webcam" class="absolute w-full h-full object-cover scale-x-[-1]" autoplay muted playsinline></video>
                 <canvas id="output_canvas" class="absolute w-full h-full object-cover scale-x-[-1] z-10"></canvas>
                 
-                <div id="loading" class="absolute z-20 text-center bg-slate-900/90 p-5 rounded-xl border border-slate-700">
+                <div id="loading" class="absolute z-20 text-center bg-slate-900/90 p-5 rounded-xl border border-slate-700 max-w-md">
                     <p id="loading-text" class="text-sky-400 font-medium animate-pulse">Initialisation du système...</p>
+                    <p id="error-log" class="text-xs text-rose-400 mt-2 font-mono hidden"></p>
                 </div>
             </div>
-            <button id="webcamButton" class="mt-4 w-full bg-emerald-600 hover:bg-emerald-500 text-white font-medium py-2.5 px-4 rounded-xl transition shadow-lg hidden">
+            <button id="webcamButton" class="mt-4 w-full bg-emerald-600 hover:bg-emerald-500 text-white font-medium py-2.5 px-4 rounded-xl transition shadow-lg">
                 Démarrer la Caméra du Cours
             </button>
         </div>
@@ -54,7 +55,7 @@
                     <input type="color" id="color-target" value="#00FF00" class="w-12 h-12 rounded cursor-pointer border-0 bg-transparent">
                     <div>
                         <p class="text-sm font-semibold text-slate-200">Sélectionne la couleur</p>
-                        <p class="text-xs text-slate-400">Par défaut : Vert Fluo/Pomme</p>
+                        <p class="text-xs text-slate-400">Par défaut : Vert Fluo</p>
                     </div>
                 </div>
                 <div class="mt-4 grid grid-cols-2 gap-2">
@@ -88,7 +89,6 @@
                 <div id="help-writing" class="text-sm text-slate-400 space-y-2 hidden">
                     <p>1. Prenez un feutre avec un bouchon bien coloré.</p>
                     <p>2. Bougez-le devant la caméra pour tracer des lignes.</p>
-                    <p>3. Cachez le bouchon dans votre main pour faire une pause.</p>
                 </div>
             </div>
         </div>
@@ -112,6 +112,7 @@
         const styloStatus = document.getElementById("stylo-status");
         const loadingDiv = document.getElementById("loading");
         const loadingText = document.getElementById("loading-text");
+        const errorLog = document.getElementById("error-log");
         
         const colorTargetInput = document.getElementById("color-target");
         const sliderTolerance = document.getElementById("slider-tolerance");
@@ -138,7 +139,7 @@
 
         btnClearDrawing.addEventListener("click", () => { drawingPoints = []; });
 
-        // --- INTERRUPTEURS DE MODE ---
+        // --- SWITCH DE MODES ---
         btnCounter.addEventListener("click", () => {
             currentMode = "counter";
             btnCounter.className = "flex-1 py-3 px-6 rounded-xl font-bold transition flex items-center justify-center gap-2 bg-sky-600 text-white shadow-lg";
@@ -163,130 +164,169 @@
             panelColorPicker.classList.remove("hidden");
         });
 
-        // --- CONFIGURATION MEDIAPIPE ---
-        const hands = new Hands({
-            locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
-        });
-        hands.setOptions({ maxNumHands: 4, modelComplexity: 1, minDetectionConfidence: 0.6 });
-
-        hands.onResults((results) => {
-            if (currentMode !== "counter") return;
-            if (!loadingDiv.classList.contains('hidden')) loadingDiv.classList.add('hidden');
-
-            canvasElement.width = videoElement.videoWidth;
-            canvasElement.height = videoElement.videoHeight;
-            canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+        // --- CONFIGURATION SÉCURISÉE DE MEDIAPIPE ---
+        let hands = null;
+        try {
+            hands = new Hands({
+                locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4/${file}`
+            });
+            hands.setOptions({ maxNumHands: 4, modelComplexity: 1, minDetectionConfidence: 0.6 });
             
-            // CORRECTIF CRUCIAL : Remise à zéro à chaque frame
-            let totalFingers = 0;
+            hands.onResults((results) => {
+                if (currentMode !== "counter") return;
+                if (!loadingDiv.classList.contains('hidden')) loadingDiv.classList.add('hidden');
 
-            if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
-                for (const landmarks of results.multiHandLandmarks) {
-                    drawHandPoints(landmarks);
-                    
-                    // Calcul précis des doigts levés
-                    let thumb = landmarks[4].x > landmarks[3].x ? 1 : 0;
-                    let index = landmarks[8].y < landmarks[6].y ? 1 : 0;
-                    let middle = landmarks[12].y < landmarks[10].y ? 1 : 0;
-                    let ring = landmarks[16].y < landmarks[14].y ? 1 : 0;
-                    let pinky = landmarks[20].y < landmarks[18].y ? 1 : 0;
-                    
-                    totalFingers += (thumb + index + middle + ring + pinky);
+                canvasElement.width = videoElement.videoWidth || 640;
+                canvasElement.height = videoElement.videoHeight || 480;
+                canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+                
+                let totalFingers = 0;
+
+                if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+                    for (const landmarks of results.multiHandLandmarks) {
+                        drawHandPoints(landmarks);
+                        let thumb = landmarks[4].x > landmarks[3].x ? 1 : 0;
+                        let index = landmarks[8].y < landmarks[6].y ? 1 : 0;
+                        let middle = landmarks[12].y < landmarks[10].y ? 1 : 0;
+                        let ring = landmarks[16].y < landmarks[14].y ? 1 : 0;
+                        let pinky = landmarks[20].y < landmarks[18].y ? 1 : 0;
+                        totalFingers += (thumb + index + middle + ring + pinky);
+                    }
+                    fingerCountDisplay.innerText = totalFingers;
+                } else {
+                    fingerCountDisplay.innerText = 0;
                 }
-                fingerCountDisplay.innerText = totalFingers;
-            } else {
-                fingerCountDisplay.innerText = 0;
-            }
-        });
+            });
+        } catch (e) {
+            errorLog.classList.remove("hidden");
+            errorLog.innerText = "Erreur d'initialisation IA : " + e.message;
+        }
 
-        // --- ALGORITHME DE SUIVI DE COULEUR ---
+        // --- ALGORITHME DE TRACKING DE COULEUR ---
         function processColorTracking() {
             if (currentMode !== "writing") return;
             if (!loadingDiv.classList.contains('hidden')) loadingDiv.classList.add('hidden');
 
-            canvasElement.width = videoElement.videoWidth;
-            canvasElement.height = videoElement.videoHeight;
+            canvasElement.width = videoElement.videoWidth || 640;
+            canvasElement.height = videoElement.videoHeight || 480;
             
-            canvasCtx.drawImage(videoElement, 0, 0, canvasElement.width, canvasElement.height);
-            
-            const frameData = canvasCtx.getImageData(0, 0, canvasElement.width, canvasElement.height);
-            const pixels = frameData.data;
-            
-            let sumX = 0, sumY = 0, countColors = 0;
+            try {
+                canvasCtx.drawImage(videoElement, 0, 0, canvasElement.width, canvasElement.height);
+                const frameData = canvasCtx.getImageData(0, 0, canvasElement.width, canvasElement.height);
+                const pixels = frameData.data;
+                
+                let sumX = 0, sumY = 0, countColors = 0;
 
-            for (let i = 0; i < pixels.length; i += 4) {
-                let r = pixels[i];
-                let g = pixels[i+1];
-                let b = pixels[i+2];
+                for (let i = 0; i < pixels.length; i += 4) {
+                    let r = pixels[i];
+                    let g = pixels[i+1];
+                    let b = pixels[i+2];
 
-                let distance = Math.sqrt(
-                    Math.pow(r - targetRGB.r, 2) +
-                    Math.pow(g - targetRGB.g, 2) +
-                    Math.pow(b - targetRGB.b, 2)
-                );
+                    let distance = Math.sqrt(
+                        Math.pow(r - targetRGB.r, 2) + Math.pow(g - targetRGB.g, 2) +
+                        Math.pow(b - targetRGB.b, 2)
+                    );
 
-                if (distance < tolerance) {
-                    let pixelIndex = i / 4;
-                    let x = pixelIndex % canvasElement.width;
-                    let y = Math.floor(pixelIndex / canvasElement.width);
-                    
-                    sumX += x;
-                    sumY += y;
-                    countColors++;
+                    if (distance < tolerance) {
+                        let pixelIndex = i / 4;
+                        let x = pixelIndex % canvasElement.width;
+                        let y = Math.floor(pixelIndex / canvasElement.width);
+                        sumX += x; sumY += y; countColors++;
+                    }
                 }
-            }
 
-            if (countColors > 30) { 
-                let posX = sumX / countColors;
-                let posY = sumY / countColors;
+                if (countColors > 30) { 
+                    let posX = sumX / countColors;
+                    let posY = sumY / countColors;
+                    styloStatus.innerText = "🎯 Stylo Détecté !";
+                    styloStatus.className = "text-2xl font-bold text-emerald-400";
+                    drawingPoints.push({ x: posX, y: posY, drawing: isTracing });
+                    isTracing = true; 
 
-                styloStatus.innerText = "🎯 Stylo Détecté !";
-                styloStatus.className = "text-2xl font-bold text-emerald-400";
-
-                drawingPoints.push({ x: posX, y: posY, drawing: isTracing });
-                isTracing = true; 
-
-                canvasCtx.fillStyle = "#ffffff";
-                canvasCtx.strokeStyle = "#10b981";
-                canvasCtx.lineWidth = 3;
-                canvasCtx.beginPath();
-                canvasCtx.arc(posX, posY, 10, 0, 2 * Math.PI);
-                canvasCtx.fill();
-                canvasCtx.stroke();
-            } else {
-                styloStatus.innerText = "⏸️ Stylo masqué / Levé";
-                styloStatus.className = "text-2xl font-bold text-amber-400";
-                isTracing = false; 
-            }
-
-            canvasCtx.strokeStyle = "#10b981"; 
-            canvasCtx.lineWidth = 8;
-            canvasCtx.lineCap = "round";
-            canvasCtx.lineJoin = "round";
-            
-            for (let i = 1; i < drawingPoints.length; i++) {
-                if (drawingPoints[i].drawing) {
+                    canvasCtx.fillStyle = "#ffffff";
+                    canvasCtx.strokeStyle = "#10b981";
+                    canvasCtx.lineWidth = 3;
                     canvasCtx.beginPath();
-                    canvasCtx.moveTo(drawingPoints[i-1].x, drawingPoints[i-1].y);
-                    canvasCtx.lineTo(drawingPoints[i].x, drawingPoints[i].y);
-                    canvasCtx.stroke();
+                    canvasCtx.arc(posX, posY, 10, 0, 2 * Math.PI);
+                    canvasCtx.fill(); canvasCtx.stroke();
+                } else {
+                    styloStatus.innerText = "⏸️ Stylo masqué / Levé";
+                    styloStatus.className = "text-2xl font-bold text-amber-400";
+                    isTracing = false; 
                 }
+
+                canvasCtx.strokeStyle = "#10b981"; 
+                canvasCtx.lineWidth = 8;
+                canvasCtx.lineCap = "round"; canvasCtx.lineJoin = "round";
+                
+                for (let i = 1; i < drawingPoints.length; i++) {
+                    if (drawingPoints[i].drawing) {
+                        canvasCtx.beginPath();
+                        canvasCtx.moveTo(drawingPoints[i-1].x, drawingPoints[i-1].y);
+                        canvasCtx.lineTo(drawingPoints[i].x, drawingPoints[i].y);
+                        canvasCtx.stroke();
+                    }
+                }
+            } catch (err) {
+                console.log("Attente du flux vidéo...");
             }
         }
 
-        // --- CONFIGURATION CAMÉRA ET ECOUTE ---
-        const camera = new Camera(videoElement, {
-            onFrame: async () => { 
-                if (currentMode === "counter") {
-                    await hands.send({ image: videoElement }); 
-                } else if (currentMode === "writing") {
-                    processColorTracking();
-                }
-            },
-            width: 1280, height: 720
+        // --- INITIALISATION DE LA CAMÉRA AVEC DETECTION D'ERREURS ---
+        let camera = null;
+        try {
+            camera = new Camera(videoElement, {
+                onFrame: async () => { 
+                    if (currentMode === "counter" && hands) {
+                        await hands.send({ image: videoElement }); 
+                    } else if (currentMode === "writing") {
+                        processColorTracking();
+                    }
+                },
+                width: 1280, height: 720
+            });
+        } catch (e) {
+            errorLog.classList.remove("hidden");
+            errorLog.innerText = "Erreur module caméra : " + e.message;
+        }
+
+        // Changement du texte d'attente pour inviter à cliquer
+        setTimeout(() => {
+            if (loadingText.innerText === "Initialisation du système...") {
+                loadingText.innerText = "Prêt. Cliquez sur le bouton vert ci-dessous pour démarrer la caméra !";
+            }
+        }, 1500);
+
+        webcamButton.addEventListener("click", () => {
+            loadingText.innerText = "Démarrage de la caméra et de l'IA en cours...";
+            errorLog.classList.add("hidden");
+            
+            if (camera) {
+                camera.start()
+                    .then(() => {
+                        loadingDiv.classList.add("hidden");
+                    })
+                    .catch((err) => {
+                        errorLog.classList.remove("hidden");
+                        errorLog.innerText = "Impossible d'accéder à la caméra. Vérifiez les autorisations de votre navigateur. Erreur : " + err.message;
+                    });
+            } else {
+                errorLog.classList.remove("hidden");
+                errorLog.innerText = "Le système caméra n'est pas prêt.";
+            }
         });
 
-        setTimeout(() => {
-            loadingText.innerText = "Tout est prêt !";
-            webcamButton.classList.remove("hidden");
-        }, 1200
+        function drawHandPoints(landmarks) {
+            canvasCtx.fillStyle = "#0ea5e9";
+            canvasCtx.strokeStyle = "#ffffff";
+            canvasCtx.lineWidth = 1;
+            for (let i = 0; i < landmarks.length; i++) {
+                const pt = landmarks[i];
+                canvasCtx.beginPath();
+                canvasCtx.arc(pt.x * canvasElement.width, pt.y * canvasElement.height, 4, 0, 2 * Math.PI);
+                canvasCtx.fill(); canvasCtx.stroke();
+            }
+        }
+    </script>
+</body>
+</html>
