@@ -7,15 +7,16 @@
     <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
     <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 </head>
 <body class="bg-slate-900 text-slate-100 font-sans min-h-screen">
 
     <header class="bg-slate-800 border-b border-slate-700 p-4 shadow-lg">
         <div class="max-w-7xl mx-auto flex justify-between items-center">
             <h1 class="text-2xl font-bold text-sky-400 flex items-center gap-2">
-                🎓 AI EduGest <span class="text-xs bg-indigo-500/20 text-indigo-300 px-2 py-1 rounded-full border border-indigo-500/30">Pro Canvas v2.0</span>
+                🎓 AI EduGest <span class="text-xs bg-purple-500/20 text-purple-300 px-2 py-1 rounded-full border border-purple-500/30">Smart Canvas v3.0</span>
             </h1>
-            <p class="text-sm text-slate-400">Assistant et Tableau Interactif</p>
+            <p class="text-sm text-slate-400">Assistant et Tableau IA Interactif</p>
         </div>
     </header>
 
@@ -25,43 +26,71 @@
                 🔢 Mode Caméra (Comptage)
             </button>
             <button id="btn-mode-writing" class="flex-1 py-3 px-6 rounded-xl font-bold transition flex items-center justify-center gap-2 bg-slate-700 text-slate-300 hover:bg-slate-600">
-                ✏️ Tableau Blanc Pro
+                ✏️ Tableau Blanc + IA
             </button>
         </div>
     </section>
 
     <main class="max-w-7xl mx-auto p-6 grid grid-cols-1 lg:grid-cols-3 gap-6">
         
-        <div class="lg:col-span-2 bg-slate-800 rounded-2xl p-4 border border-slate-700 shadow-xl relative flex flex-col">
+        <div class="lg:col-span-2 flex flex-col gap-4">
             
-            <div id="camera-container" class="relative rounded-xl overflow-hidden bg-slate-950 aspect-video flex items-center justify-center">
-                <video id="webcam" class="absolute w-full h-full object-cover scale-x-[-1]" autoplay muted playsinline></video>
-                <canvas id="output_canvas" class="absolute w-full h-full object-cover scale-x-[-1] z-10"></canvas>
-                
-                <div id="loading" class="absolute z-20 text-center bg-slate-900/90 p-5 rounded-xl border border-slate-700 max-w-md">
-                    <p id="loading-text" class="text-sky-400 font-medium animate-pulse">Initialisation du système...</p>
-                    <p id="error-log" class="text-xs text-rose-400 mt-2 font-mono hidden"></p>
+            <div class="bg-slate-800 rounded-2xl p-4 border border-slate-700 shadow-xl relative flex flex-col">
+                <div id="camera-container" class="relative rounded-xl overflow-hidden bg-slate-950 aspect-video flex items-center justify-center">
+                    <video id="webcam" class="absolute w-full h-full object-cover scale-x-[-1]" autoplay muted playsinline></video>
+                    <canvas id="output_canvas" class="absolute w-full h-full object-cover scale-x-[-1] z-10"></canvas>
+                    
+                    <div id="loading" class="absolute z-20 text-center bg-slate-900/90 p-5 rounded-xl border border-slate-700 max-w-md">
+                        <p id="loading-text" class="text-sky-400 font-medium animate-pulse">Initialisation du système...</p>
+                        <p id="error-log" class="text-xs text-rose-400 mt-2 font-mono hidden"></p>
+                    </div>
+                </div>
+
+                <div id="whiteboard-container" class="relative rounded-xl overflow-hidden bg-white aspect-video hidden border-2 border-slate-600 cursor-crosshair">
+                    <canvas id="whiteboard_canvas" class="absolute top-0 left-0 w-full h-full touch-none"></canvas>
+                </div>
+
+                <button id="webcamButton" class="mt-4 w-full bg-emerald-600 hover:bg-emerald-500 text-white font-medium py-2.5 px-4 rounded-xl transition shadow-lg">
+                    Démarrer la Caméra du Cours
+                </button>
+            </div>
+
+            <div id="text-result-container" class="bg-slate-800 rounded-2xl p-4 border border-slate-700 shadow-xl hidden">
+                <div class="flex justify-between items-center mb-2">
+                    <p class="text-xs uppercase tracking-wider text-slate-400 font-semibold">📝 Texte reconnu par l'IA</p>
+                    <button id="btn-copy" class="text-xs bg-slate-700 hover:bg-slate-600 text-white px-3 py-1 rounded transition">Copier</button>
+                </div>
+                <div class="bg-slate-950 p-4 rounded-xl border border-slate-700 min-h-[80px] flex items-center justify-center">
+                    <p id="recognized-text" class="text-slate-400 italic text-center">Aucun texte détecté pour le moment...</p>
+                </div>
+                <div id="ocr-progress-bar" class="w-full bg-slate-700 h-1 mt-2 rounded hidden overflow-hidden">
+                    <div id="ocr-progress-fill" class="bg-purple-500 h-full w-0 transition-all duration-300"></div>
                 </div>
             </div>
-
-            <div id="whiteboard-container" class="relative rounded-xl overflow-hidden bg-white aspect-video hidden border-2 border-slate-600 cursor-crosshair">
-                <canvas id="whiteboard_canvas" class="absolute top-0 left-0 w-full h-full touch-none"></canvas>
-            </div>
-
-            <button id="webcamButton" class="mt-4 w-full bg-emerald-600 hover:bg-emerald-500 text-white font-medium py-2.5 px-4 rounded-xl transition shadow-lg">
-                Démarrer la Caméra du Cours
-            </button>
         </div>
 
         <div class="flex flex-col gap-6">
             
             <div id="panel-whiteboard-tools" class="bg-slate-800 rounded-2xl p-5 border border-slate-700 shadow-xl hidden">
-                <p class="text-xs uppercase tracking-wider text-slate-400 font-semibold mb-3">🧰 Outils du Tableau</p>
+                <p class="text-xs uppercase tracking-wider text-slate-400 font-semibold mb-3">🧰 Outils & Reconnaissance</p>
+                
+                <div class="bg-purple-900/20 border border-purple-500/30 p-3 rounded-xl mb-4">
+                    <p class="text-xs text-purple-300 mb-2 font-semibold">Dictionnaire IA :</p>
+                    <select id="lang-select" class="w-full bg-slate-900 text-slate-200 border border-slate-600 rounded-lg p-2 text-sm mb-2 outline-none">
+                        <option value="fra">🇫🇷 Français</option>
+                        <option value="eng">🇬🇧 English</option>
+                    </select>
+                    <button id="btn-analyze-text" class="w-full bg-purple-600 hover:bg-purple-500 text-white text-sm font-bold py-2 rounded-lg transition shadow-lg flex items-center justify-center gap-2">
+                        🪄 Lire et corriger le texte
+                    </button>
+                </div>
+
+                <hr class="border-slate-700 mb-4">
                 
                 <div class="grid grid-cols-2 gap-3 mb-4">
                     <div class="flex items-center gap-3 bg-slate-950 p-2 rounded-xl border border-slate-700">
                         <input type="color" id="wb-color" value="#0f172a" class="w-10 h-10 rounded cursor-pointer border-0 bg-transparent">
-                        <span class="text-sm font-semibold text-slate-200">Couleur</span>
+                        <span class="text-sm font-semibold text-slate-200">Encre</span>
                     </div>
                     <button id="btn-eraser" class="bg-slate-700 hover:bg-slate-600 text-slate-200 text-sm font-bold py-2 rounded-xl border border-slate-600 transition flex items-center justify-center gap-2">
                         🧹 Gomme
@@ -70,14 +99,14 @@
 
                 <div class="mb-4 bg-slate-900 px-3 py-2 rounded-xl border border-slate-700">
                     <div class="flex justify-between text-xs text-slate-400 mb-1">
-                        <span>Épaisseur du trait</span>
+                        <span>Épaisseur</span>
                         <span id="wb-size-val" class="font-bold text-indigo-400">4px</span>
                     </div>
                     <input type="range" id="wb-size" min="1" max="20" value="4" class="w-full">
                 </div>
 
-                <button id="btn-clear-wb" class="w-full bg-rose-700 hover:bg-rose-600 text-white text-sm font-bold py-3 rounded-xl transition shadow-lg flex items-center justify-center gap-2">
-                    🗑️ Tout effacer
+                <button id="btn-clear-wb" class="w-full bg-rose-700 hover:bg-rose-600 text-white text-sm font-bold py-2 rounded-xl transition shadow-lg flex items-center justify-center gap-2">
+                    🗑️ Effacer le Tableau
                 </button>
             </div>
             
@@ -91,12 +120,12 @@
             </div>
 
             <div class="bg-slate-800 rounded-2xl p-6 border border-slate-700 shadow-xl">
-                <h3 class="text-md font-semibold text-slate-200 mb-2">💡 Mode d'emploi</h3>
+                <h3 class="text-md font-semibold text-slate-200 mb-2">💡 Astuce IA</h3>
                 <div id="help-counter" class="text-sm text-slate-400">
                     <p>La caméra analyse vos mains en temps réel pour compter ou faire voter les élèves.</p>
                 </div>
                 <div id="help-writing" class="text-sm text-slate-400 space-y-2 hidden">
-                    <p>Utilisez votre souris, un écran tactile ou une tablette graphique pour écrire avec une précision absolue sur le tableau blanc.</p>
+                    <p>Écrivez proprement vos mots en lettres détachées. L'IA tentera de les reconnaître en utilisant les dictionnaires Anglais ou Français !</p>
                 </div>
             </div>
         </div>
@@ -109,26 +138,23 @@
         const canvasCtx = canvasElement.getContext("2d");
         const webcamButton = document.getElementById("webcamButton");
         
-        // Conteneurs
         const cameraContainer = document.getElementById("camera-container");
         const whiteboardContainer = document.getElementById("whiteboard-container");
         const panelWhiteboardTools = document.getElementById("panel-whiteboard-tools");
         const panelAiResults = document.getElementById("panel-ai-results");
+        const textResultContainer = document.getElementById("text-result-container");
         
-        // Boutons
         const btnCounter = document.getElementById("btn-mode-counter");
         const btnWriting = document.getElementById("btn-mode-writing");
         const btnClearWb = document.getElementById("btn-clear-wb");
         const btnEraser = document.getElementById("btn-eraser");
         
-        // Outils Whiteboard
         const wbCanvas = document.getElementById("whiteboard_canvas");
         const wbCtx = wbCanvas.getContext("2d", { willReadFrequently: true });
         const wbColorPicker = document.getElementById("wb-color");
         const wbSizeSlider = document.getElementById("wb-size");
         const wbSizeVal = document.getElementById("wb-size-val");
         
-        // Textes
         const fingerCountDisplay = document.getElementById("finger-count");
         const loadingDiv = document.getElementById("loading");
         const loadingText = document.getElementById("loading-text");
@@ -136,29 +162,34 @@
         const helpCounter = document.getElementById("help-counter");
         const helpWriting = document.getElementById("help-writing");
 
+        // Éléments OCR
+        const btnAnalyzeText = document.getElementById("btn-analyze-text");
+        const langSelect = document.getElementById("lang-select");
+        const recognizedText = document.getElementById("recognized-text");
+        const btnCopy = document.getElementById("btn-copy");
+        const ocrProgressBar = document.getElementById("ocr-progress-bar");
+        const ocrProgressFill = document.getElementById("ocr-progress-fill");
+
         let currentMode = "counter"; 
 
-        // --- GESTION DU TABLEAU BLANC (CANVAS PRO) ---
+        // --- GESTION DU TABLEAU BLANC ---
         let isDrawing = false;
         let isEraser = false;
         let currentColor = wbColorPicker.value;
         let currentSize = wbSizeSlider.value;
 
-        // Ajuster la taille interne du canvas à sa taille d'affichage (Crucial pour la précision)
         function resizeCanvas() {
             const rect = whiteboardContainer.getBoundingClientRect();
             wbCanvas.width = rect.width;
             wbCanvas.height = rect.height;
-            // Remplir de blanc au départ
             wbCtx.fillStyle = "#ffffff";
             wbCtx.fillRect(0, 0, wbCanvas.width, wbCanvas.height);
         }
         window.addEventListener('resize', resizeCanvas);
 
-        // Outils
         wbColorPicker.addEventListener("input", (e) => {
             currentColor = e.target.value;
-            if (isEraser) toggleEraser(); // Désactive la gomme si on choisit une couleur
+            if (isEraser) toggleEraser(); 
         });
 
         wbSizeSlider.addEventListener("input", (e) => {
@@ -179,33 +210,27 @@
         btnClearWb.addEventListener("click", () => {
             wbCtx.fillStyle = "#ffffff";
             wbCtx.fillRect(0, 0, wbCanvas.width, wbCanvas.height);
+            recognizedText.innerText = "Aucun texte détecté pour le moment...";
+            recognizedText.className = "text-slate-400 italic text-center";
         });
 
-        // Fonction pour récupérer la position précise de la souris/doigt
         function getPos(e) {
             const rect = wbCanvas.getBoundingClientRect();
             let clientX = e.clientX;
             let clientY = e.clientY;
-            
             if (e.touches && e.touches.length > 0) {
                 clientX = e.touches[0].clientX;
                 clientY = e.touches[0].clientY;
             }
-            
-            return {
-                x: clientX - rect.left,
-                y: clientY - rect.top
-            };
+            return { x: clientX - rect.left, y: clientY - rect.top };
         }
 
-        // Événements de dessin
         function startDrawing(e) {
             e.preventDefault();
             isDrawing = true;
             const pos = getPos(e);
             wbCtx.beginPath();
             wbCtx.moveTo(pos.x, pos.y);
-            
             wbCtx.lineWidth = currentSize;
             wbCtx.lineCap = "round";
             wbCtx.lineJoin = "round";
@@ -225,16 +250,80 @@
             wbCtx.closePath();
         }
 
-        // Souris
         wbCanvas.addEventListener("mousedown", startDrawing);
         wbCanvas.addEventListener("mousemove", draw);
         wbCanvas.addEventListener("mouseup", stopDrawing);
         wbCanvas.addEventListener("mouseout", stopDrawing);
-
-        // Tactile (Tablettes / Smartphones)
         wbCanvas.addEventListener("touchstart", startDrawing, {passive: false});
         wbCanvas.addEventListener("touchmove", draw, {passive: false});
         wbCanvas.addEventListener("touchend", stopDrawing);
+
+        // --- LECTURE DU TEXTE PAR IA (TESSERACT.JS) ---
+        btnAnalyzeText.addEventListener("click", async () => {
+            const lang = langSelect.value;
+            
+            // UI : Mode chargement
+            btnAnalyzeText.innerText = "⏳ Analyse en cours...";
+            btnAnalyzeText.disabled = true;
+            ocrProgressBar.classList.remove("hidden");
+            ocrProgressFill.style.width = "0%";
+            recognizedText.innerText = "Extraction des lettres en cours...";
+            recognizedText.className = "text-purple-400 font-medium text-center animate-pulse";
+
+            try {
+                // On extrait l'image du tableau blanc
+                const imageData = wbCanvas.toDataURL("image/png");
+                
+                // Lancement de Tesseract JS
+                const { data: { text } } = await Tesseract.recognize(
+                    imageData,
+                    lang,
+                    { 
+                        logger: m => {
+                            // Barre de progression
+                            if(m.status === "recognizing text"){
+                                const progress = Math.round(m.progress * 100);
+                                ocrProgressFill.style.width = progress + "%";
+                            }
+                        } 
+                    }
+                );
+
+                const cleanedText = text.trim();
+
+                if (cleanedText) {
+                    recognizedText.innerText = cleanedText;
+                    recognizedText.className = "text-emerald-400 font-bold text-lg text-center";
+                } else {
+                    recognizedText.innerText = "L'IA n'a pas réussi à lire ce texte. Essayez d'écrire plus grand ou en lettres détachées.";
+                    recognizedText.className = "text-amber-400 text-center text-sm";
+                }
+
+            } catch (err) {
+                console.error(err);
+                recognizedText.innerText = "Erreur du dictionnaire IA.";
+                recognizedText.className = "text-rose-400 text-center";
+            } finally {
+                // UI : Remise à zéro
+                btnAnalyzeText.innerHTML = "🪄 Lire et corriger le texte";
+                btnAnalyzeText.disabled = false;
+                setTimeout(() => { ocrProgressBar.classList.add("hidden"); }, 1000);
+            }
+        });
+
+        // Bouton pour copier le texte reconnu
+        btnCopy.addEventListener("click", () => {
+            if(recognizedText.innerText && !recognizedText.innerText.includes("Aucun texte") && !recognizedText.innerText.includes("L'IA n'a pas réussi")) {
+                navigator.clipboard.writeText(recognizedText.innerText);
+                const oldText = btnCopy.innerText;
+                btnCopy.innerText = "Copié !";
+                btnCopy.classList.replace("bg-slate-700", "bg-emerald-600");
+                setTimeout(() => {
+                    btnCopy.innerText = oldText;
+                    btnCopy.classList.replace("bg-emerald-600", "bg-slate-700");
+                }, 2000);
+            }
+        });
 
         // --- SWITCH DE MODES ---
         btnCounter.addEventListener("click", () => {
@@ -246,6 +335,7 @@
             whiteboardContainer.classList.add("hidden");
             panelAiResults.classList.remove("hidden");
             panelWhiteboardTools.classList.add("hidden");
+            textResultContainer.classList.add("hidden");
             webcamButton.classList.remove("hidden");
             
             helpCounter.classList.remove("hidden");
@@ -254,23 +344,23 @@
 
         btnWriting.addEventListener("click", () => {
             currentMode = "writing";
-            btnWriting.className = "flex-1 py-3 px-6 rounded-xl font-bold transition flex items-center justify-center gap-2 bg-indigo-600 text-white shadow-lg";
+            btnWriting.className = "flex-1 py-3 px-6 rounded-xl font-bold transition flex items-center justify-center gap-2 bg-purple-600 text-white shadow-lg";
             btnCounter.className = "flex-1 py-3 px-6 rounded-xl font-bold transition flex items-center justify-center gap-2 bg-slate-700 text-slate-300 hover:bg-slate-600";
             
             cameraContainer.classList.add("hidden");
             whiteboardContainer.classList.remove("hidden");
             panelAiResults.classList.add("hidden");
             panelWhiteboardTools.classList.remove("hidden");
-            webcamButton.classList.add("hidden"); // Cache le bouton caméra quand on est sur le tableau
+            textResultContainer.classList.remove("hidden");
+            webcamButton.classList.add("hidden");
             
             helpCounter.classList.add("hidden");
             helpWriting.classList.remove("hidden");
             
-            // Initialiser la taille correcte quand on l'affiche
             resizeCanvas();
         });
 
-        // --- CONFIGURATION SÉCURISÉE DE MEDIAPIPE ---
+        // --- CONFIGURATION DE MEDIAPIPE (POUR LA CAMÉRA) ---
         let hands = null;
         try {
             hands = new Hands({
@@ -305,10 +395,9 @@
             });
         } catch (e) {
             errorLog.classList.remove("hidden");
-            errorLog.innerText = "Erreur IA : " + e.message;
+            errorLog.innerText = "Erreur IA Caméra : " + e.message;
         }
 
-        // --- INITIALISATION CAMÉRA ---
         let camera = null;
         try {
             camera = new Camera(videoElement, {
@@ -331,16 +420,15 @@
         }, 1500);
 
         webcamButton.addEventListener("click", () => {
-            loadingText.innerText = "Démarrage de la caméra en cours...";
+            loadingText.innerText = "Démarrage...";
             errorLog.classList.add("hidden");
-            
             if (camera) {
                 camera.start().then(() => {
                     loadingDiv.classList.add("hidden");
-                    webcamButton.classList.add("hidden"); // Cache le bouton une fois démarré
+                    webcamButton.classList.add("hidden");
                 }).catch((err) => {
                     errorLog.classList.remove("hidden");
-                    errorLog.innerText = "Impossible d'accéder à la caméra. Autorisez-la dans le navigateur.";
+                    errorLog.innerText = "Caméra bloquée par le navigateur.";
                 });
             }
         });
