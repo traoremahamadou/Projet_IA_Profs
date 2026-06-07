@@ -2,448 +2,89 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI EduGest - Panel Professeur</title>
+    <title>AI SignTranslator Pro</title>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/knn-classifier"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/hand-pose-detection"></script>
     <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
-    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
-    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
 </head>
-<body class="bg-slate-900 text-slate-100 font-sans min-h-screen">
+<body class="bg-slate-900 text-white min-h-screen flex flex-col items-center p-6">
 
-    <header class="bg-slate-800 border-b border-slate-700 p-4 shadow-lg">
-        <div class="max-w-7xl mx-auto flex justify-between items-center">
-            <h1 class="text-2xl font-bold text-sky-400 flex items-center gap-2">
-                🎓 AI EduGest <span class="text-xs bg-purple-500/20 text-purple-300 px-2 py-1 rounded-full border border-purple-500/30">Smart Canvas v3.0</span>
-            </h1>
-            <p class="text-sm text-slate-400">Assistant et Tableau IA Interactif</p>
+    <h1 class="text-3xl font-black text-emerald-400 mb-4">AI SignTranslator - LSF/Bambara</h1>
+    
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6 w-full max-w-5xl">
+        <div class="bg-black rounded-2xl overflow-hidden border-4 border-slate-700">
+            <video id="webcam" class="w-full h-auto scale-x-[-1]" autoplay muted playsinline></video>
         </div>
-    </header>
 
-    <section class="max-w-7xl mx-auto mt-6 px-6">
-        <div class="bg-slate-800 p-2 rounded-2xl border border-slate-700 flex gap-4">
-            <button id="btn-mode-counter" class="flex-1 py-3 px-6 rounded-xl font-bold transition flex items-center justify-center gap-2 bg-sky-600 text-white shadow-lg">
-                🔢 Mode Caméra (Comptage)
-            </button>
-            <button id="btn-mode-writing" class="flex-1 py-3 px-6 rounded-xl font-bold transition flex items-center justify-center gap-2 bg-slate-700 text-slate-300 hover:bg-slate-600">
-                ✏️ Tableau Blanc + IA
-            </button>
-        </div>
-    </section>
-
-    <main class="max-w-7xl mx-auto p-6 grid grid-cols-1 lg:grid-cols-3 gap-6">
-        
-        <div class="lg:col-span-2 flex flex-col gap-4">
+        <div class="bg-slate-800 p-6 rounded-2xl border border-slate-700">
+            <div id="status" class="text-xl font-bold mb-4">Système prêt : Entraînez un signe</div>
             
-            <div class="bg-slate-800 rounded-2xl p-4 border border-slate-700 shadow-xl relative flex flex-col">
-                <div id="camera-container" class="relative rounded-xl overflow-hidden bg-slate-950 aspect-video flex items-center justify-center">
-                    <video id="webcam" class="absolute w-full h-full object-cover scale-x-[-1]" autoplay muted playsinline></video>
-                    <canvas id="output_canvas" class="absolute w-full h-full object-cover scale-x-[-1] z-10"></canvas>
-                    
-                    <div id="loading" class="absolute z-20 text-center bg-slate-900/90 p-5 rounded-xl border border-slate-700 max-w-md">
-                        <p id="loading-text" class="text-sky-400 font-medium animate-pulse">Initialisation du système...</p>
-                        <p id="error-log" class="text-xs text-rose-400 mt-2 font-mono hidden"></p>
-                    </div>
-                </div>
-
-                <div id="whiteboard-container" class="relative rounded-xl overflow-hidden bg-white aspect-video hidden border-2 border-slate-600 cursor-crosshair">
-                    <canvas id="whiteboard_canvas" class="absolute top-0 left-0 w-full h-full touch-none"></canvas>
-                </div>
-
-                <button id="webcamButton" class="mt-4 w-full bg-emerald-600 hover:bg-emerald-500 text-white font-medium py-2.5 px-4 rounded-xl transition shadow-lg">
-                    Démarrer la Caméra du Cours
-                </button>
+            <div class="grid grid-cols-2 gap-2 mb-4">
+                <input type="text" id="signName" placeholder="Nom du signe (ex: Bonjour)" class="bg-slate-900 p-2 rounded border border-slate-600 col-span-2">
+                <button onclick="trainSign()" class="bg-purple-600 py-2 rounded font-bold">Apprendre ce signe</button>
+                <button onclick="startPredicting()" class="bg-emerald-600 py-2 rounded font-bold">Démarrer Traduction</button>
             </div>
 
-            <div id="text-result-container" class="bg-slate-800 rounded-2xl p-4 border border-slate-700 shadow-xl hidden">
-                <div class="flex justify-between items-center mb-2">
-                    <p class="text-xs uppercase tracking-wider text-slate-400 font-semibold">📝 Texte reconnu par l'IA</p>
-                    <button id="btn-copy" class="text-xs bg-slate-700 hover:bg-slate-600 text-white px-3 py-1 rounded transition">Copier</button>
-                </div>
-                <div class="bg-slate-950 p-4 rounded-xl border border-slate-700 min-h-[80px] flex items-center justify-center">
-                    <p id="recognized-text" class="text-slate-400 italic text-center">Aucun texte détecté pour le moment...</p>
-                </div>
-                <div id="ocr-progress-bar" class="w-full bg-slate-700 h-1 mt-2 rounded hidden overflow-hidden">
-                    <div id="ocr-progress-fill" class="bg-purple-500 h-full w-0 transition-all duration-300"></div>
-                </div>
+            <div id="resultBox" class="mt-6 p-4 bg-slate-950 rounded-xl border border-emerald-500 text-center">
+                <p id="bambaraText" class="text-2xl font-bold text-emerald-400">---</p>
             </div>
         </div>
-
-        <div class="flex flex-col gap-6">
-            
-            <div id="panel-whiteboard-tools" class="bg-slate-800 rounded-2xl p-5 border border-slate-700 shadow-xl hidden">
-                <p class="text-xs uppercase tracking-wider text-slate-400 font-semibold mb-3">🧰 Outils & Reconnaissance</p>
-                
-                <div class="bg-purple-900/20 border border-purple-500/30 p-3 rounded-xl mb-4">
-                    <p class="text-xs text-purple-300 mb-2 font-semibold">Dictionnaire IA :</p>
-                    <select id="lang-select" class="w-full bg-slate-900 text-slate-200 border border-slate-600 rounded-lg p-2 text-sm mb-2 outline-none">
-                        <option value="fra">🇫🇷 Français</option>
-                        <option value="eng">🇬🇧 English</option>
-                    </select>
-                    <button id="btn-analyze-text" class="w-full bg-purple-600 hover:bg-purple-500 text-white text-sm font-bold py-2 rounded-lg transition shadow-lg flex items-center justify-center gap-2">
-                        🪄 Lire et corriger le texte
-                    </button>
-                </div>
-
-                <hr class="border-slate-700 mb-4">
-                
-                <div class="grid grid-cols-2 gap-3 mb-4">
-                    <div class="flex items-center gap-3 bg-slate-950 p-2 rounded-xl border border-slate-700">
-                        <input type="color" id="wb-color" value="#0f172a" class="w-10 h-10 rounded cursor-pointer border-0 bg-transparent">
-                        <span class="text-sm font-semibold text-slate-200">Encre</span>
-                    </div>
-                    <button id="btn-eraser" class="bg-slate-700 hover:bg-slate-600 text-slate-200 text-sm font-bold py-2 rounded-xl border border-slate-600 transition flex items-center justify-center gap-2">
-                        🧹 Gomme
-                    </button>
-                </div>
-
-                <div class="mb-4 bg-slate-900 px-3 py-2 rounded-xl border border-slate-700">
-                    <div class="flex justify-between text-xs text-slate-400 mb-1">
-                        <span>Épaisseur</span>
-                        <span id="wb-size-val" class="font-bold text-indigo-400">4px</span>
-                    </div>
-                    <input type="range" id="wb-size" min="1" max="20" value="4" class="w-full">
-                </div>
-
-                <button id="btn-clear-wb" class="w-full bg-rose-700 hover:bg-rose-600 text-white text-sm font-bold py-2 rounded-xl transition shadow-lg flex items-center justify-center gap-2">
-                    🗑️ Effacer le Tableau
-                </button>
-            </div>
-            
-            <div id="panel-ai-results" class="bg-gradient-to-br from-slate-800 to-slate-850 rounded-2xl p-6 border border-slate-700 shadow-xl text-center min-h-[140px] flex flex-col justify-center">
-                <p class="text-slate-400 uppercase tracking-wider text-xs font-semibold mb-1">Analyse Live</p>
-                
-                <div id="box-counter-result">
-                    <div id="finger-count" class="text-6xl font-extrabold text-sky-400 my-1">0</div>
-                    <p class="text-xs text-slate-400">Doigts détectés simultanément</p>
-                </div>
-            </div>
-
-            <div class="bg-slate-800 rounded-2xl p-6 border border-slate-700 shadow-xl">
-                <h3 class="text-md font-semibold text-slate-200 mb-2">💡 Astuce IA</h3>
-                <div id="help-counter" class="text-sm text-slate-400">
-                    <p>La caméra analyse vos mains en temps réel pour compter ou faire voter les élèves.</p>
-                </div>
-                <div id="help-writing" class="text-sm text-slate-400 space-y-2 hidden">
-                    <p>Écrivez proprement vos mots en lettres détachées. L'IA tentera de les reconnaître en utilisant les dictionnaires Anglais ou Français !</p>
-                </div>
-            </div>
-        </div>
-    </main>
+    </div>
 
     <script>
-        // --- ÉLÉMENTS DOM ---
-        const videoElement = document.getElementById("webcam");
-        const canvasElement = document.getElementById("output_canvas");
-        const canvasCtx = canvasElement.getContext("2d");
-        const webcamButton = document.getElementById("webcamButton");
-        
-        const cameraContainer = document.getElementById("camera-container");
-        const whiteboardContainer = document.getElementById("whiteboard-container");
-        const panelWhiteboardTools = document.getElementById("panel-whiteboard-tools");
-        const panelAiResults = document.getElementById("panel-ai-results");
-        const textResultContainer = document.getElementById("text-result-container");
-        
-        const btnCounter = document.getElementById("btn-mode-counter");
-        const btnWriting = document.getElementById("btn-mode-writing");
-        const btnClearWb = document.getElementById("btn-clear-wb");
-        const btnEraser = document.getElementById("btn-eraser");
-        
-        const wbCanvas = document.getElementById("whiteboard_canvas");
-        const wbCtx = wbCanvas.getContext("2d", { willReadFrequently: true });
-        const wbColorPicker = document.getElementById("wb-color");
-        const wbSizeSlider = document.getElementById("wb-size");
-        const wbSizeVal = document.getElementById("wb-size-val");
-        
-        const fingerCountDisplay = document.getElementById("finger-count");
-        const loadingDiv = document.getElementById("loading");
-        const loadingText = document.getElementById("loading-text");
-        const errorLog = document.getElementById("error-log");
-        const helpCounter = document.getElementById("help-counter");
-        const helpWriting = document.getElementById("help-writing");
+        const classifier = knnClassifier.create();
+        let detector;
+        let isPredicting = false;
 
-        // Éléments OCR
-        const btnAnalyzeText = document.getElementById("btn-analyze-text");
-        const langSelect = document.getElementById("lang-select");
-        const recognizedText = document.getElementById("recognized-text");
-        const btnCopy = document.getElementById("btn-copy");
-        const ocrProgressBar = document.getElementById("ocr-progress-bar");
-        const ocrProgressFill = document.getElementById("ocr-progress-fill");
-
-        let currentMode = "counter"; 
-
-        // --- GESTION DU TABLEAU BLANC ---
-        let isDrawing = false;
-        let isEraser = false;
-        let currentColor = wbColorPicker.value;
-        let currentSize = wbSizeSlider.value;
-
-        function resizeCanvas() {
-            const rect = whiteboardContainer.getBoundingClientRect();
-            wbCanvas.width = rect.width;
-            wbCanvas.height = rect.height;
-            wbCtx.fillStyle = "#ffffff";
-            wbCtx.fillRect(0, 0, wbCanvas.width, wbCanvas.height);
-        }
-        window.addEventListener('resize', resizeCanvas);
-
-        wbColorPicker.addEventListener("input", (e) => {
-            currentColor = e.target.value;
-            if (isEraser) toggleEraser(); 
-        });
-
-        wbSizeSlider.addEventListener("input", (e) => {
-            currentSize = e.target.value;
-            wbSizeVal.innerText = currentSize + "px";
-        });
-
-        function toggleEraser() {
-            isEraser = !isEraser;
-            if (isEraser) {
-                btnEraser.className = "bg-indigo-600 hover:bg-indigo-500 text-white text-sm font-bold py-2 rounded-xl border border-indigo-500 transition flex items-center justify-center gap-2 shadow-lg";
-            } else {
-                btnEraser.className = "bg-slate-700 hover:bg-slate-600 text-slate-200 text-sm font-bold py-2 rounded-xl border border-slate-600 transition flex items-center justify-center gap-2";
-            }
-        }
-        btnEraser.addEventListener("click", toggleEraser);
-
-        btnClearWb.addEventListener("click", () => {
-            wbCtx.fillStyle = "#ffffff";
-            wbCtx.fillRect(0, 0, wbCanvas.width, wbCanvas.height);
-            recognizedText.innerText = "Aucun texte détecté pour le moment...";
-            recognizedText.className = "text-slate-400 italic text-center";
-        });
-
-        function getPos(e) {
-            const rect = wbCanvas.getBoundingClientRect();
-            let clientX = e.clientX;
-            let clientY = e.clientY;
-            if (e.touches && e.touches.length > 0) {
-                clientX = e.touches[0].clientX;
-                clientY = e.touches[0].clientY;
-            }
-            return { x: clientX - rect.left, y: clientY - rect.top };
+        async function init() {
+            const video = document.getElementById('webcam');
+            const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+            video.srcObject = stream;
+            detector = await handPoseDetection.createDetector(handPoseDetection.SupportedModels.MediaPipeHands, { runtime: 'tfjs' });
         }
 
-        function startDrawing(e) {
-            e.preventDefault();
-            isDrawing = true;
-            const pos = getPos(e);
-            wbCtx.beginPath();
-            wbCtx.moveTo(pos.x, pos.y);
-            wbCtx.lineWidth = currentSize;
-            wbCtx.lineCap = "round";
-            wbCtx.lineJoin = "round";
-            wbCtx.strokeStyle = isEraser ? "#ffffff" : currentColor;
-        }
-
-        function draw(e) {
-            if (!isDrawing) return;
-            e.preventDefault();
-            const pos = getPos(e);
-            wbCtx.lineTo(pos.x, pos.y);
-            wbCtx.stroke();
-        }
-
-        function stopDrawing() {
-            isDrawing = false;
-            wbCtx.closePath();
-        }
-
-        wbCanvas.addEventListener("mousedown", startDrawing);
-        wbCanvas.addEventListener("mousemove", draw);
-        wbCanvas.addEventListener("mouseup", stopDrawing);
-        wbCanvas.addEventListener("mouseout", stopDrawing);
-        wbCanvas.addEventListener("touchstart", startDrawing, {passive: false});
-        wbCanvas.addEventListener("touchmove", draw, {passive: false});
-        wbCanvas.addEventListener("touchend", stopDrawing);
-
-        // --- LECTURE DU TEXTE PAR IA (TESSERACT.JS) ---
-        btnAnalyzeText.addEventListener("click", async () => {
-            const lang = langSelect.value;
+        async function trainSign() {
+            const label = document.getElementById('signName').value;
+            if (!label) return alert("Donnez un nom au signe");
             
-            // UI : Mode chargement
-            btnAnalyzeText.innerText = "⏳ Analyse en cours...";
-            btnAnalyzeText.disabled = true;
-            ocrProgressBar.classList.remove("hidden");
-            ocrProgressFill.style.width = "0%";
-            recognizedText.innerText = "Extraction des lettres en cours...";
-            recognizedText.className = "text-purple-400 font-medium text-center animate-pulse";
+            const hands = await detector.estimateHands(document.getElementById('webcam'));
+            if (hands.length > 0) {
+                const landmarks = tf.tensor(hands[0].keypoints.map(kp => [kp.x, kp.y]));
+                classifier.addExample(landmarks, label);
+                document.getElementById('status').innerText = "Signe '" + label + "' appris !";
+            }
+        }
 
-            try {
-                // On extrait l'image du tableau blanc
-                const imageData = wbCanvas.toDataURL("image/png");
+        async function startPredicting() {
+            isPredicting = true;
+            predictLoop();
+        }
+
+        async function predictLoop() {
+            if (!isPredicting) return;
+            const hands = await detector.estimateHands(document.getElementById('webcam'));
+            
+            if (hands.length > 0) {
+                const landmarks = tf.tensor(hands[0].keypoints.map(kp => [kp.x, kp.y]));
+                const result = await classifier.predictClass(landmarks);
                 
-                // Lancement de Tesseract JS
-                const { data: { text } } = await Tesseract.recognize(
-                    imageData,
-                    lang,
-                    { 
-                        logger: m => {
-                            // Barre de progression
-                            if(m.status === "recognizing text"){
-                                const progress = Math.round(m.progress * 100);
-                                ocrProgressFill.style.width = progress + "%";
-                            }
-                        } 
-                    }
-                );
-
-                const cleanedText = text.trim();
-
-                if (cleanedText) {
-                    recognizedText.innerText = cleanedText;
-                    recognizedText.className = "text-emerald-400 font-bold text-lg text-center";
-                } else {
-                    recognizedText.innerText = "L'IA n'a pas réussi à lire ce texte. Essayez d'écrire plus grand ou en lettres détachées.";
-                    recognizedText.className = "text-amber-400 text-center text-sm";
+                if (result.confidences[result.label] > 0.8) {
+                    const dict = { "Bonjour": "I ni sogoma", "Merci": "I ni ce" };
+                    const trad = dict[result.label] || result.label;
+                    document.getElementById('bambaraText').innerText = trad;
+                    
+                    // Parole
+                    const msg = new SpeechSynthesisUtterance(trad);
+                    msg.lang = 'fr-FR'; // Utiliser FR car la synthèse Bambara est rare
+                    window.speechSynthesis.speak(msg);
                 }
-
-            } catch (err) {
-                console.error(err);
-                recognizedText.innerText = "Erreur du dictionnaire IA.";
-                recognizedText.className = "text-rose-400 text-center";
-            } finally {
-                // UI : Remise à zéro
-                btnAnalyzeText.innerHTML = "🪄 Lire et corriger le texte";
-                btnAnalyzeText.disabled = false;
-                setTimeout(() => { ocrProgressBar.classList.add("hidden"); }, 1000);
             }
-        });
-
-        // Bouton pour copier le texte reconnu
-        btnCopy.addEventListener("click", () => {
-            if(recognizedText.innerText && !recognizedText.innerText.includes("Aucun texte") && !recognizedText.innerText.includes("L'IA n'a pas réussi")) {
-                navigator.clipboard.writeText(recognizedText.innerText);
-                const oldText = btnCopy.innerText;
-                btnCopy.innerText = "Copié !";
-                btnCopy.classList.replace("bg-slate-700", "bg-emerald-600");
-                setTimeout(() => {
-                    btnCopy.innerText = oldText;
-                    btnCopy.classList.replace("bg-emerald-600", "bg-slate-700");
-                }, 2000);
-            }
-        });
-
-        // --- SWITCH DE MODES ---
-        btnCounter.addEventListener("click", () => {
-            currentMode = "counter";
-            btnCounter.className = "flex-1 py-3 px-6 rounded-xl font-bold transition flex items-center justify-center gap-2 bg-sky-600 text-white shadow-lg";
-            btnWriting.className = "flex-1 py-3 px-6 rounded-xl font-bold transition flex items-center justify-center gap-2 bg-slate-700 text-slate-300 hover:bg-slate-600";
-            
-            cameraContainer.classList.remove("hidden");
-            whiteboardContainer.classList.add("hidden");
-            panelAiResults.classList.remove("hidden");
-            panelWhiteboardTools.classList.add("hidden");
-            textResultContainer.classList.add("hidden");
-            webcamButton.classList.remove("hidden");
-            
-            helpCounter.classList.remove("hidden");
-            helpWriting.classList.add("hidden");
-        });
-
-        btnWriting.addEventListener("click", () => {
-            currentMode = "writing";
-            btnWriting.className = "flex-1 py-3 px-6 rounded-xl font-bold transition flex items-center justify-center gap-2 bg-purple-600 text-white shadow-lg";
-            btnCounter.className = "flex-1 py-3 px-6 rounded-xl font-bold transition flex items-center justify-center gap-2 bg-slate-700 text-slate-300 hover:bg-slate-600";
-            
-            cameraContainer.classList.add("hidden");
-            whiteboardContainer.classList.remove("hidden");
-            panelAiResults.classList.add("hidden");
-            panelWhiteboardTools.classList.remove("hidden");
-            textResultContainer.classList.remove("hidden");
-            webcamButton.classList.add("hidden");
-            
-            helpCounter.classList.add("hidden");
-            helpWriting.classList.remove("hidden");
-            
-            resizeCanvas();
-        });
-
-        // --- CONFIGURATION DE MEDIAPIPE (POUR LA CAMÉRA) ---
-        let hands = null;
-        try {
-            hands = new Hands({
-                locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4/${file}`
-            });
-            hands.setOptions({ maxNumHands: 4, modelComplexity: 1, minDetectionConfidence: 0.6 });
-            
-            hands.onResults((results) => {
-                if (currentMode !== "counter") return;
-                if (!loadingDiv.classList.contains('hidden')) loadingDiv.classList.add('hidden');
-
-                canvasElement.width = videoElement.videoWidth || 640;
-                canvasElement.height = videoElement.videoHeight || 480;
-                canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
-                
-                let totalFingers = 0;
-
-                if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
-                    for (const landmarks of results.multiHandLandmarks) {
-                        drawHandPoints(landmarks);
-                        let thumb = landmarks[4].x > landmarks[3].x ? 1 : 0;
-                        let index = landmarks[8].y < landmarks[6].y ? 1 : 0;
-                        let middle = landmarks[12].y < landmarks[10].y ? 1 : 0;
-                        let ring = landmarks[16].y < landmarks[14].y ? 1 : 0;
-                        let pinky = landmarks[20].y < landmarks[18].y ? 1 : 0;
-                        totalFingers += (thumb + index + middle + ring + pinky);
-                    }
-                    fingerCountDisplay.innerText = totalFingers;
-                } else {
-                    fingerCountDisplay.innerText = 0;
-                }
-            });
-        } catch (e) {
-            errorLog.classList.remove("hidden");
-            errorLog.innerText = "Erreur IA Caméra : " + e.message;
+            requestAnimationFrame(predictLoop);
         }
 
-        let camera = null;
-        try {
-            camera = new Camera(videoElement, {
-                onFrame: async () => { 
-                    if (currentMode === "counter" && hands) {
-                        await hands.send({ image: videoElement }); 
-                    }
-                },
-                width: 1280, height: 720
-            });
-        } catch (e) {
-            errorLog.classList.remove("hidden");
-            errorLog.innerText = "Erreur Caméra : " + e.message;
-        }
-
-        setTimeout(() => {
-            if (loadingText.innerText === "Initialisation du système...") {
-                loadingText.innerText = "Prêt. Cliquez pour démarrer la caméra !";
-            }
-        }, 1500);
-
-        webcamButton.addEventListener("click", () => {
-            loadingText.innerText = "Démarrage...";
-            errorLog.classList.add("hidden");
-            if (camera) {
-                camera.start().then(() => {
-                    loadingDiv.classList.add("hidden");
-                    webcamButton.classList.add("hidden");
-                }).catch((err) => {
-                    errorLog.classList.remove("hidden");
-                    errorLog.innerText = "Caméra bloquée par le navigateur.";
-                });
-            }
-        });
-
-        function drawHandPoints(landmarks) {
-            canvasCtx.fillStyle = "#0ea5e9";
-            canvasCtx.strokeStyle = "#ffffff";
-            canvasCtx.lineWidth = 1;
-            for (let i = 0; i < landmarks.length; i++) {
-                const pt = landmarks[i];
-                canvasCtx.beginPath();
-                canvasCtx.arc(pt.x * canvasElement.width, pt.y * canvasElement.height, 4, 0, 2 * Math.PI);
-                canvasCtx.fill(); canvasCtx.stroke();
-            }
-        }
+        init();
     </script>
 </body>
 </html>
