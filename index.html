@@ -13,7 +13,7 @@
     <header class="bg-slate-800 border-b border-slate-700 p-4 shadow-lg">
         <div class="max-w-7xl mx-auto flex justify-between items-center">
             <h1 class="text-2xl font-bold text-sky-400 flex items-center gap-2">
-                🎓 AI EduGest <span class="text-xs bg-sky-500/20 text-sky-300 px-2 py-1 rounded-full border border-sky-500/30">Web v1.1</span>
+                🎓 AI EduGest <span class="text-xs bg-sky-500/20 text-sky-300 px-2 py-1 rounded-full border border-sky-500/30">Web v1.2</span>
             </h1>
             <p class="text-sm text-slate-400">Assistant Gestuel pour Enseignants</p>
         </div>
@@ -23,7 +23,7 @@
         
         <div class="lg:col-span-2 bg-slate-800 rounded-2xl p-4 border border-slate-700 shadow-xl relative">
             <h2 class="text-lg font-semibold text-slate-300 mb-3 flex items-center gap-2">
-                <span class="w-2 h-2 rounded-full bg-red-500 animate-pulse"></span> Flux Caméra de la Classe
+                <span class="w-2 h-2 rounded-full bg-red-500 animate-pulse"></span> Ardoise Virtuelle & Tableau
             </h2>
             
             <div class="relative rounded-xl overflow-hidden bg-slate-950 aspect-video flex items-center justify-center">
@@ -32,27 +32,37 @@
                 
                 <div id="loading" class="absolute z-20 text-center bg-slate-900/90 p-5 rounded-xl border border-slate-700">
                     <p id="loading-text" class="text-sky-400 font-medium animate-pulse">Initialisation des modules IA...</p>
-                    <p class="text-xs text-slate-400 mt-1">Veuillez patienter</p>
                 </div>
             </div>
-            <button id="webcamButton" class="mt-4 w-full bg-sky-600 hover:bg-sky-500 text-white font-medium py-2.5 px-4 rounded-xl transition shadow-lg shadow-sky-600/20 hidden">
+            <button id="webcamButton" class="mt-4 w-full bg-sky-600 hover:bg-sky-500 text-white font-medium py-2.5 px-4 rounded-xl transition shadow-lg hidden">
                 Activer la Caméra
             </button>
         </div>
 
         <div class="flex flex-col gap-6">
-            <div class="bg-gradient-to-br from-sky-900 to-indigo-950 rounded-2xl p-6 border border-sky-500/30 shadow-xl text-center">
-                <p class="text-sky-300 uppercase tracking-wider text-xs font-semibold mb-1">Total Doigts Levés</p>
-                <div id="finger-count" class="text-7xl font-extrabold text-white my-2">0</div>
-                <p class="text-slate-400 text-xs">Détection simultanée (Max 4 mains)</p>
+            <div class="bg-gradient-to-br from-slate-800 to-slate-850 rounded-2xl p-6 border border-slate-700 shadow-xl">
+                <p class="text-slate-400 uppercase tracking-wider text-xs font-semibold mb-1">Mode Actuel</p>
+                <div id="current-mode" class="text-2xl font-bold text-emerald-400 my-2">Analyse simple</div>
+                <div class="text-sm text-slate-400 mt-2">
+                    Total doigts : <span id="finger-count" class="font-bold text-white text-lg">0</span>
+                </div>
             </div>
 
             <div class="bg-slate-800 rounded-2xl p-6 border border-slate-700 shadow-xl">
-                <h3 class="text-md font-semibold text-slate-200 mb-3">💡 Guide Rapide</h3>
+                <h3 class="text-md font-semibold text-slate-200 mb-3">🎮 Gestes de l'Ardoise</h3>
                 <ul class="text-sm text-slate-400 space-y-3">
-                    <li class="flex gap-2"><span class="text-sky-400">1.</span> Attendez que le bouton "Activer la Caméra" apparaisse.</li>
-                    <li class="flex gap-2"><span class="text-sky-400">2.</span> Autorisez l'accès à la webcam.</li>
-                    <li class="flex gap-2"><span class="text-sky-400">3.</span> Présentez vos mains pour compter vos doigts !</li>
+                    <li class="flex items-center gap-2">
+                        <span class="bg-emerald-500/20 text-emerald-400 px-2 py-0.5 rounded text-xs font-mono">☝️ Index Seul</span> 
+                        <span>Écrire / Dessiner à l'écran</span>
+                    </li>
+                    <li class="flex items-center gap-2">
+                        <span class="bg-rose-500/20 text-rose-400 px-2 py-0.5 rounded text-xs font-mono">✌️ Index + Majeur</span> 
+                        <span>Effacer toute l'ardoise</span>
+                    </li>
+                    <li class="flex items-center gap-2">
+                        <span class="bg-sky-500/20 text-sky-400 px-2 py-0.5 rounded text-xs font-mono">🖐️ Main Haute</span> 
+                        <span>Compter les doigts</span>
+                    </li>
                 </ul>
             </div>
         </div>
@@ -64,75 +74,100 @@
         const canvasCtx = canvasElement.getContext("2d");
         const webcamButton = document.getElementById("webcamButton");
         const fingerCountDisplay = document.getElementById("finger-count");
+        const modeDisplay = document.getElementById("current-mode");
         const loadingDiv = document.getElementById("loading");
         const loadingText = document.getElementById("loading-text");
 
-        // 1. Configuration du modèle de détection de mains
+        // Tableau pour stocker les points du dessin (Air Writing)
+        let drawingPoints = [];
+
         const hands = new Hands({
-            locateFile: (file) => {
-                return `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`;
-            }
+            locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
         });
 
         hands.setOptions({
-            maxNumHands: 4,
+            maxNumHands: 2, // 2 mains suffisent pour dessiner et contrôler
             modelComplexity: 1,
-            minDetectionConfidence: 0.6,
-            minTrackingConfidence: 0.6
+            minDetectionConfidence: 0.7,
+            minTrackingConfidence: 0.7
         });
 
-        // Fonction qui traite les résultats de l'IA
         hands.onResults((results) => {
-            // Masquer le chargement dès que la première analyse réussit
-            if (!loadingDiv.classList.contains('hidden')) {
-                loadingDiv.classList.add('hidden');
-            }
+            if (!loadingDiv.classList.contains('hidden')) loadingDiv.classList.add('hidden');
 
-            // Ajuster la taille du canvas
             canvasElement.width = videoElement.videoWidth;
             canvasElement.height = videoElement.videoHeight;
-
-            // Nettoyer le canvas à chaque frame
             canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
             
             let totalFingers = 0;
 
-            if (results.multiHandLandmarks) {
+            // 1. DESSINER L'ARDOISE (les lignes enregistrées)
+            if (drawingPoints.length > 0) {
+                canvasCtx.strokeStyle = "#ef4444"; // Ligne rouge pour écrire
+                canvasCtx.lineWidth = 8;
+                canvasCtx.lineCap = "round";
+                canvasCtx.lineJoin = "round";
+                canvasCtx.beginPath();
+                for (let i = 0; i < drawingPoints.length; i++) {
+                    if (i === 0) {
+                        canvasCtx.moveTo(drawingPoints[i].x * canvasElement.width, drawingPoints[i].y * canvasElement.height);
+                    } else {
+                        canvasCtx.lineTo(drawingPoints[i].x * canvasElement.width, drawingPoints[i].y * canvasElement.height);
+                    }
+                }
+                canvasCtx.stroke();
+            }
+
+            // 2. ANALYSE DES GESTES EN TEMPS RÉEL
+            if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
                 for (const landmarks of results.multiHandLandmarks) {
-                    // Dessiner les points des mains
                     drawHandPoints(landmarks);
 
-                    // Calcul des doigts levés
-                    let fingersUp = 0;
+                    // Vérification de l'état de chaque doigt (1 = levé, 0 = baissé)
+                    let thumb = landmarks[4].x > landmarks[3].x ? 1 : 0;
+                    let index = landmarks[8].y < landmarks[6].y ? 1 : 0;
+                    let middle = landmarks[12].y < landmarks[10].y ? 1 : 0;
+                    let ring = landmarks[16].y < landmarks[14].y ? 1 : 0;
+                    let pinky = landmarks[20].y < landmarks[18].y ? 1 : 0;
 
-                    // Pouce (Axe X avec l'effet miroir)
-                    if (landmarks[4].x > landmarks[3].x) fingersUp++;
-
-                    // Index, Majeur, Annulaire, Auriculaire (Axe Y)
-                    const tips = [8, 12, 16, 20];
-                    for (const tip of tips) {
-                        if (landmarks[tip].y < landmarks[tip - 2].y) {
-                            fingersUp++;
-                        }
-                    }
+                    let fingersUp = thumb + index + middle + ring + pinky;
                     totalFingers += fingersUp;
+
+                    // --- LOGIQUE DE L'ARDOISE ---
+                    // Geste Écriture : Index levé TOUT SEUL
+                    if (index === 1 && middle === 0 && ring === 0 && pinky === 0) {
+                        modeDisplay.innerText = "✍️ Écriture en cours...";
+                        modeDisplay.className = "text-2xl font-bold text-amber-400";
+                        // On ajoute la position du bout de l'index au tableau de dessin
+                        drawingPoints.push({ x: landmarks[8].x, y: landmarks[8].y });
+                    } 
+                    // Geste Effacer : Index + Majeur levés ensemble (comme un ciseau ✌️)
+                    else if (index === 1 && middle === 1 && ring === 0 && pinky === 0) {
+                        modeDisplay.innerText = "🧼 Nettoyage Ardoise";
+                        modeDisplay.className = "text-2xl font-bold text-rose-400";
+                        drawingPoints = []; // On vide le tableau de points
+                    }
+                    // Autre geste
+                    else {
+                        modeDisplay.innerText = "📊 Mode Observation";
+                        modeDisplay.className = "text-2xl font-bold text-emerald-400";
+                    }
                 }
+            } else {
+                modeDisplay.innerText = "💤 En attente d'une main";
+                modeDisplay.className = "text-2xl font-bold text-slate-400";
             }
+
             fingerCountDisplay.innerText = totalFingers;
         });
 
-        // 2. Gestion de la caméra
         const camera = new Camera(videoElement, {
-            onFrame: async () => {
-                await hands.send({ image: videoElement });
-            },
-            width: 1280,
-            height: 720
+            onFrame: async () => { await hands.send({ image: videoElement }); },
+            width: 1280, height: 720
         });
 
-        // Activer le bouton dès que le script est prêt à être lancé
         setTimeout(() => {
-            loadingText.innerText = "IA prête ! Cliquez ci-dessous.";
+            loadingText.innerText = "Prêt pour le cours !";
             webcamButton.classList.remove("hidden");
         }, 1500);
 
@@ -140,21 +175,17 @@
             camera.start().then(() => {
                 loadingDiv.classList.add("hidden");
                 webcamButton.classList.add("hidden");
-            }).catch((err) => {
-                alert("Erreur d'accès à la caméra : " + err);
             });
         });
 
-        // Fonction pour dessiner proprement les repères sur le canvas
         function drawHandPoints(landmarks) {
             canvasCtx.fillStyle = "#0ea5e9";
             canvasCtx.strokeStyle = "#ffffff";
-            canvasCtx.lineWidth = 2;
-
+            canvasCtx.lineWidth = 1.5;
             for (let i = 0; i < landmarks.length; i++) {
                 const pt = landmarks[i];
                 canvasCtx.beginPath();
-                canvasCtx.arc(pt.x * canvasElement.width, pt.y * canvasElement.height, 5, 0, 2 * Math.PI);
+                canvasCtx.arc(pt.x * canvasElement.width, pt.y * canvasElement.height, 4, 0, 2 * Math.PI);
                 canvasCtx.fill();
                 canvasCtx.stroke();
             }
